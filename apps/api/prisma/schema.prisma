@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  CASH_ON_ARRIVAL
+  INSURANCE
+}
+
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  APPOINTMENT_STATUS
+  NEW_MESSAGE
+  PRESCRIPTION_READY
+  PAYMENT_CONFIRMATION
+  SYSTEM
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phoneNumber  String?
+  role         Role     @default(PATIENT)
+  avatarUrl    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patientProfile PatientProfile?
+  doctorProfile  DoctorProfile?
+
+  sentMessages     ChatMessage[]  @relation("SentMessages")
+  receivedMessages ChatMessage[]  @relation("ReceivedMessages")
+  notifications    Notification[]
+
+  @@map("users")
+}
+
+model PatientProfile {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  dateOfBirth      DateTime?
+  gender           Gender?
+  bloodType        String?
+  allergies        String?   @db.Text
+  emergencyContact String?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+  prescriptions Prescription[]
+  reviews       Review[]
+
+  @@map("patient_profiles")
+}
+
+model Specialty {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?  @db.Text
+  icon        String?
+  createdAt   DateTime @default(now())
+
+  doctors DoctorProfile[]
+
+  @@map("specialties")
+}
+
+model DoctorProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  specialtyId       String
+  licenseNumber     String   @unique
+  yearsOfExperience Int      @default(0)
+  bio               String?  @db.Text
+  consultationFee   Decimal  @db.Decimal(10, 2)
+  clinicAddress     String?
+  isVerified        Boolean  @default(false)
+  ratingAverage     Float    @default(0.0)
+  totalReviews      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty     Specialty      @relation(fields: [specialtyId], references: [id])
+  appointments  Appointment[]
+  prescriptions Prescription[]
+  reviews       Review[]
+
+  @@map("doctor_profiles")
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String
+  doctorId        String
+  scheduledAt     DateTime
+  durationMinutes Int               @default(30)
+  status          AppointmentStatus @default(PENDING)
+  reason          String?           @db.Text
+  notes           String?           @db.Text
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  patient      PatientProfile @relation(fields: [patientId], references: [id])
+  doctor       DoctorProfile  @relation(fields: [doctorId], references: [id])
+  payment      Payment?
+  prescription Prescription?
+  review       Review?
+
+  @@index([scheduledAt])
+  @@map("appointments")
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  appointmentId  String        @unique
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("USD")
+  status         PaymentStatus @default(PENDING)
+  paymentMethod  PaymentMethod @default(CREDIT_CARD)
+  transactionRef String?
+  createdAt      DateTime      @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Prescription {
+  id            String   @id @default(uuid())
+  appointmentId String   @unique
+  patientId     String
+  doctorId      String
+  diagnosis     String   @db.Text
+  notes         String?  @db.Text
+  issuedAt      DateTime @default(now())
+
+  appointment Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     PatientProfile     @relation(fields: [patientId], references: [id])
+  doctor      DoctorProfile      @relation(fields: [doctorId], references: [id])
+  items       PrescriptionItem[]
+
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id             String @id @default(uuid())
+  prescriptionId String
+  medicationName String
+  dosage         String
+  frequency      String
+  duration       String
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@map("prescription_items")
+}
+
+model Review {
+  id            String   @id @default(uuid())
+  appointmentId String   @unique
+  patientId     String
+  doctorId      String
+  rating        Int
+  comment       String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  appointment Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     PatientProfile @relation(fields: [patientId], references: [id])
+  doctor      DoctorProfile  @relation(fields: [doctorId], references: [id])
+
+  @@map("reviews")
+}
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  message    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
