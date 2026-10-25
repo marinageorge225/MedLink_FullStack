@@ -7,25 +7,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ───────────────────────── Enums ─────────────────────────
+
 enum Role {
   PATIENT
   DOCTOR
   ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 enum Gender {
   MALE
   FEMALE
-  OTHER
+}
+
+enum HealthItemType {
+  ALLERGY
+  CHRONIC_CONDITION
+  PREVIOUS_CONDITION
+  MEDICATION
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
 }
 
 enum AppointmentStatus {
   PENDING
   CONFIRMED
-  IN_PROGRESS
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
 }
 
 enum PaymentStatus {
@@ -35,205 +60,404 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum PaymentMethod {
-  CREDIT_CARD
-  DEBIT_CARD
-  CASH_ON_ARRIVAL
-  INSURANCE
+enum NotificationType {
+  BOOKING_CONFIRMED
+  REMINDER_24H
+  REMINDER_2H
+  DOCTOR_APPROVED
+  DOCTOR_REJECTED
+  NEW_PRESCRIPTION
+  NEW_CHAT_MESSAGE
+  DOCTOR_PENDING_APPROVAL
 }
 
-enum NotificationType {
-  APPOINTMENT_REMINDER
-  APPOINTMENT_STATUS
-  NEW_MESSAGE
-  PRESCRIPTION_READY
-  PAYMENT_CONFIRMATION
-  SYSTEM
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+  SMS
 }
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+// ───────────────────── Accounts ─────────────────────
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  firstName    String
-  lastName     String
-  phoneNumber  String?
-  role         Role     @default(PATIENT)
-  avatarUrl    String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              BigInt     @id @default(autoincrement())
+  role            Role
+  email           String?    @unique
+  mobile          String?    @unique
+  passwordHash    String     @map("password_hash")
+  status          UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?  @map("email_verified_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
 
-  patientProfile PatientProfile?
-  doctorProfile  DoctorProfile?
-
-  sentMessages     ChatMessage[]  @relation("SentMessages")
-  receivedMessages ChatMessage[]  @relation("ReceivedMessages")
-  notifications    Notification[]
+  patient               Patient?
+  doctor                Doctor?
+  passwordResetTokens   PasswordResetToken[]
+  reviewedDoctors       Doctor[]              @relation("DoctorReviewedBy")
+  cancelledAppointments Appointment[]         @relation("AppointmentCancelledBy")
+  appointmentAuditLogs  AppointmentAuditLog[]
+  chatMessages          ChatMessage[]
+  notifications         Notification[]
+  priceChanges          PriceChangeLog[]
+  auditLogs             AuditLog[]
 
   @@map("users")
 }
 
-model PatientProfile {
-  id               String    @id @default(uuid())
-  userId           String    @unique
-  dateOfBirth      DateTime?
-  gender           Gender?
-  bloodType        String?
-  allergies        String?   @db.Text
-  emergencyContact String?
+model PasswordResetToken {
+  id        BigInt    @id @default(autoincrement())
+  userId    BigInt    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ───────────────────── Patient ─────────────────────
+
+model Patient {
+  userId      BigInt    @id @map("user_id")
+  fullName    String    @map("full_name")
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  gender      Gender?
+  photoUrl    String?   @map("photo_url")
+
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  healthItems   PatientHealthItem[]
+  attachments   Attachment[]
   appointments  Appointment[]
   prescriptions Prescription[]
   reviews       Review[]
 
-  @@map("patient_profiles")
+  @@map("patients")
 }
 
-model Specialty {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  description String?  @db.Text
-  icon        String?
-  createdAt   DateTime @default(now())
+model PatientHealthItem {
+  id        BigInt         @id @default(autoincrement())
+  patientId BigInt         @map("patient_id")
+  itemType  HealthItemType @map("item_type")
+  name      String
+  notes     String?        @db.Text
 
-  doctors DoctorProfile[]
+  patient Patient @relation(fields: [patientId], references: [userId], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_health_items")
+}
+
+model Attachment {
+  id         BigInt   @id @default(autoincrement())
+  patientId  BigInt   @map("patient_id")
+  fileName   String   @map("file_name")
+  filePath   String   @map("file_path")
+  fileType   String   @map("file_type")
+  sizeBytes  Int      @map("size_bytes")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  patient Patient @relation(fields: [patientId], references: [userId], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("attachments")
+}
+
+// ───────────────────── Reference data ─────────────────────
+
+model Specialty {
+  id     Int     @id @default(autoincrement())
+  nameEn String  @unique @map("name_en")
+  nameAr String? @map("name_ar")
+
+  doctors Doctor[]
 
   @@map("specialties")
 }
 
-model DoctorProfile {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  specialtyId       String
-  licenseNumber     String   @unique
-  yearsOfExperience Int      @default(0)
-  bio               String?  @db.Text
-  consultationFee   Decimal  @db.Decimal(10, 2)
-  clinicAddress     String?
-  isVerified        Boolean  @default(false)
-  ratingAverage     Float    @default(0.0)
-  totalReviews      Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+model Location {
+  id         Int      @id @default(autoincrement())
+  governorate String
+  city       String
+  latitude   Decimal? @db.Decimal(9, 6)
+  longitude  Decimal? @db.Decimal(9, 6)
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  specialty     Specialty      @relation(fields: [specialtyId], references: [id])
+  doctors Doctor[]
+
+  @@unique([governorate, city])
+  @@map("locations")
+}
+
+model SystemSetting {
+  key         String  @id @db.VarChar(100)
+  value       String
+  description String? @db.Text
+
+  @@map("system_settings")
+}
+
+// ───────────────────── Doctor ─────────────────────
+
+model Doctor {
+  userId              BigInt         @id @map("user_id")
+  specialtyId         Int            @map("specialty_id")
+  locationId          Int?           @map("location_id")
+  reviewedBy          BigInt?        @map("reviewed_by")
+  fullName            String         @map("full_name")
+  gender              Gender?
+  bio                 String?        @db.Text
+  yearsExperience     Int?           @map("years_experience") @db.SmallInt
+  clinicName          String?        @map("clinic_name")
+  clinicAddress       String?        @map("clinic_address")
+  licenseNumber       String         @unique @map("license_number")
+  licenseDocumentPath String?        @map("license_document_path")
+  approvalStatus      ApprovalStatus @default(PENDING) @map("approval_status")
+  rejectionReason     String?        @map("rejection_reason") @db.Text
+  currentPrice        Decimal        @map("current_price") @db.Decimal(10, 2)
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer      User?                 @relation("DoctorReviewedBy", fields: [reviewedBy], references: [id])
+  specialty     Specialty             @relation(fields: [specialtyId], references: [id])
+  location      Location?             @relation(fields: [locationId], references: [id])
+  workingHours  DoctorWorkingHour[]
+  blockedPeriods DoctorBlockedPeriod[]
   appointments  Appointment[]
   prescriptions Prescription[]
   reviews       Review[]
+  priceChanges  PriceChangeLog[]
 
-  @@map("doctor_profiles")
+  @@index([specialtyId])
+  @@index([locationId])
+  @@index([approvalStatus])
+  @@map("doctors")
 }
 
+model DoctorWorkingHour {
+  id          BigInt   @id @default(autoincrement())
+  doctorId    BigInt   @map("doctor_id")
+  dayOfWeek   Int      @map("day_of_week") @db.SmallInt
+  startTime   DateTime @map("start_time") @db.Time(0)
+  endTime     DateTime @map("end_time") @db.Time(0)
+  slotMinutes Int      @map("slot_minutes") @db.SmallInt
+
+  doctor Doctor @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+
+  @@index([doctorId, dayOfWeek])
+  @@map("doctor_working_hours")
+}
+
+model DoctorBlockedPeriod {
+  id       BigInt   @id @default(autoincrement())
+  doctorId BigInt   @map("doctor_id")
+  startsAt DateTime @map("starts_at")
+  endsAt   DateTime @map("ends_at")
+  reason   String?
+
+  doctor Doctor @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+
+  @@index([doctorId, startsAt])
+  @@map("doctor_blocked_periods")
+}
+
+// ───────────────────── Booking and payment ─────────────────────
+
 model Appointment {
-  id              String            @id @default(uuid())
-  patientId       String
-  doctorId        String
-  scheduledAt     DateTime
-  durationMinutes Int               @default(30)
-  status          AppointmentStatus @default(PENDING)
-  reason          String?           @db.Text
-  notes           String?           @db.Text
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                 BigInt            @id @default(autoincrement())
+  patientId          BigInt            @map("patient_id")
+  doctorId           BigInt            @map("doctor_id")
+  cancelledBy        BigInt?           @map("cancelled_by")
+  startAt            DateTime          @map("start_at")
+  endAt              DateTime          @map("end_at")
+  status             AppointmentStatus @default(PENDING)
+  priceAtBooking     Decimal           @map("price_at_booking") @db.Decimal(10, 2)
+  paymentMethod      PaymentMethod     @map("payment_method")
+  cancelledAt        DateTime?         @map("cancelled_at")
+  cancellationReason String?           @map("cancellation_reason") @db.Text
 
-  patient      PatientProfile @relation(fields: [patientId], references: [id])
-  doctor       DoctorProfile  @relation(fields: [doctorId], references: [id])
+  // Filled automatically by database triggers (see custom SQL). Never write it from code.
+  // Equals start_at while the appointment is PENDING or CONFIRMED, otherwise NULL.
+  activeSlotStart DateTime? @map("active_slot_start")
+
+  patient      Patient               @relation(fields: [patientId], references: [userId])
+  doctor       Doctor                @relation(fields: [doctorId], references: [userId])
+  canceller    User?                 @relation("AppointmentCancelledBy", fields: [cancelledBy], references: [id])
   payment      Payment?
-  prescription Prescription?
+  auditLogs    AppointmentAuditLog[]
+  prescriptions Prescription[]
   review       Review?
+  chatMessages ChatMessage[]
+  notifications Notification[]
 
-  @@index([scheduledAt])
+  // Database safety net against double booking: one active appointment per doctor per slot.
+  @@unique([doctorId, activeSlotStart])
+  @@index([patientId, startAt])
+  @@index([doctorId, startAt])
+  @@index([status])
   @@map("appointments")
 }
 
-model Payment {
-  id             String        @id @default(uuid())
-  appointmentId  String        @unique
-  amount         Decimal       @db.Decimal(10, 2)
-  currency       String        @default("USD")
-  status         PaymentStatus @default(PENDING)
-  paymentMethod  PaymentMethod @default(CREDIT_CARD)
-  transactionRef String?
-  createdAt      DateTime      @default(now())
+model AppointmentAuditLog {
+  id            BigInt             @id @default(autoincrement())
+  appointmentId BigInt             @map("appointment_id")
+  changedBy     BigInt?            @map("changed_by")
+  oldStatus     AppointmentStatus? @map("old_status")
+  newStatus     AppointmentStatus? @map("new_status")
+  oldStartAt    DateTime?          @map("old_start_at")
+  newStartAt    DateTime?          @map("new_start_at")
+  changedAt     DateTime           @default(now()) @map("changed_at")
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  changer     User?       @relation(fields: [changedBy], references: [id])
 
+  @@index([appointmentId])
+  @@map("appointment_audit_logs")
+}
+
+model Payment {
+  id               BigInt        @id @default(autoincrement())
+  appointmentId    BigInt        @unique @map("appointment_id")
+  method           PaymentMethod
+  amount           Decimal       @db.Decimal(10, 2)
+  status           PaymentStatus @default(PENDING)
+  gatewayReference String?       @map("gateway_reference")
+  refundedAmount   Decimal       @default(0) @map("refunded_amount") @db.Decimal(10, 2)
+  paidAt           DateTime?     @map("paid_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([status])
   @@map("payments")
 }
 
-model Prescription {
-  id            String   @id @default(uuid())
-  appointmentId String   @unique
-  patientId     String
-  doctorId      String
-  diagnosis     String   @db.Text
-  notes         String?  @db.Text
-  issuedAt      DateTime @default(now())
+// ───────────────────── Clinical ─────────────────────
 
-  appointment Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient     PatientProfile     @relation(fields: [patientId], references: [id])
-  doctor      DoctorProfile      @relation(fields: [doctorId], references: [id])
+model Prescription {
+  id            BigInt   @id @default(autoincrement())
+  appointmentId BigInt   @map("appointment_id")
+  doctorId      BigInt   @map("doctor_id")
+  patientId     BigInt   @map("patient_id")
+  version       Int      @default(1)
+  notes         String?  @db.Text
+  issuedAt      DateTime @default(now()) @map("issued_at")
+
+  appointment Appointment        @relation(fields: [appointmentId], references: [id])
+  doctor      Doctor             @relation(fields: [doctorId], references: [userId])
+  patient     Patient            @relation(fields: [patientId], references: [userId])
   items       PrescriptionItem[]
 
+  @@unique([appointmentId, version])
+  @@index([patientId])
+  @@index([doctorId])
   @@map("prescriptions")
 }
 
 model PrescriptionItem {
-  id             String @id @default(uuid())
-  prescriptionId String
-  medicationName String
-  dosage         String
-  frequency      String
-  duration       String
+  id             BigInt  @id @default(autoincrement())
+  prescriptionId BigInt  @map("prescription_id")
+  medicineName   String  @map("medicine_name")
+  dose           String?
+  frequency      String?
+  duration       String?
+  notes          String? @db.Text
 
-  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  prescription Prescription @relation(fields: [prescriptionId], references: [id])
 
+  @@index([prescriptionId])
   @@map("prescription_items")
 }
 
 model Review {
-  id            String   @id @default(uuid())
-  appointmentId String   @unique
-  patientId     String
-  doctorId      String
-  rating        Int
+  id            BigInt   @id @default(autoincrement())
+  appointmentId BigInt   @unique @map("appointment_id")
+  patientId     BigInt   @map("patient_id")
+  doctorId      BigInt   @map("doctor_id")
+  rating        Int      @db.SmallInt
   comment       String?  @db.Text
-  createdAt     DateTime @default(now())
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  appointment Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient     PatientProfile @relation(fields: [patientId], references: [id])
-  doctor      DoctorProfile  @relation(fields: [doctorId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  patient     Patient     @relation(fields: [patientId], references: [userId])
+  doctor      Doctor      @relation(fields: [doctorId], references: [userId])
 
+  @@index([doctorId])
   @@map("reviews")
 }
 
+// ───────────────────── Communication ─────────────────────
+
 model ChatMessage {
-  id         String   @id @default(uuid())
-  senderId   String
-  receiverId String
-  message    String   @db.Text
-  isRead     Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id            BigInt    @id @default(autoincrement())
+  appointmentId BigInt    @map("appointment_id")
+  senderId      BigInt    @map("sender_id")
+  body          String?   @db.Text
+  filePath      String?   @map("file_path")
+  sentAt        DateTime  @default(now()) @map("sent_at")
+  readAt        DateTime? @map("read_at")
 
-  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  sender      User        @relation(fields: [senderId], references: [id])
 
+  @@index([appointmentId, sentAt])
   @@map("chat_messages")
 }
 
 model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  type      NotificationType @default(SYSTEM)
-  title     String
-  message   String           @db.Text
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
+  id            BigInt              @id @default(autoincrement())
+  recipientId   BigInt              @map("recipient_id")
+  appointmentId BigInt?             @map("appointment_id")
+  type          NotificationType
+  channel       NotificationChannel
+  status        NotificationStatus  @default(PENDING)
+  scheduledFor  DateTime?           @map("scheduled_for")
+  sentAt        DateTime?           @map("sent_at")
+  readAt        DateTime?           @map("read_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipient   User         @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
 
+  @@index([recipientId, status])
+  @@index([status, scheduledFor])
   @@map("notifications")
+}
+
+// ───────────────────── Admin and audit ─────────────────────
+
+model PriceChangeLog {
+  id        BigInt   @id @default(autoincrement())
+  doctorId  BigInt   @map("doctor_id")
+  changedBy BigInt   @map("changed_by")
+  oldPrice  Decimal  @map("old_price") @db.Decimal(10, 2)
+  newPrice  Decimal  @map("new_price") @db.Decimal(10, 2)
+  changedAt DateTime @default(now()) @map("changed_at")
+  reason    String?  @db.Text
+
+  doctor  Doctor @relation(fields: [doctorId], references: [userId])
+  changer User   @relation(fields: [changedBy], references: [id])
+
+  @@index([doctorId, changedAt])
+  @@map("price_change_log")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    BigInt?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   BigInt?  @map("entity_id")
+  beforeData Json?    @map("before_data")
+  afterData  Json?    @map("after_data")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@map("audit_logs")
 }

@@ -1,110 +1,143 @@
-import { PrismaClient, Role, Gender } from '@prisma/client';
+import { PrismaClient, Role, Gender, ApprovalStatus, HealthItemType, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding MedLink database...');
+  console.log('Seeding MedLink database with new schema...');
 
   // Hash password
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash('Password123!', salt);
 
-  // 1. Seed Specialties
+  // 1. Seed Reference Data: Specialties
   const cardiology = await prisma.specialty.upsert({
-    where: { name: 'Cardiology' },
+    where: { nameEn: 'Cardiology' },
     update: {},
     create: {
-      name: 'Cardiology',
-      description: 'Heart and cardiovascular system specialists',
-      icon: 'heart-pulse',
+      nameEn: 'Cardiology',
+      nameAr: 'أمراض القلب',
     },
   });
 
   const dermatology = await prisma.specialty.upsert({
-    where: { name: 'Dermatology' },
+    where: { nameEn: 'Dermatology' },
     update: {},
     create: {
-      name: 'Dermatology',
-      description: 'Skin, hair, and nail health specialists',
-      icon: 'activity',
+      nameEn: 'Dermatology',
+      nameAr: 'الجلدية',
     },
   });
 
   const neurology = await prisma.specialty.upsert({
-    where: { name: 'Neurology' },
+    where: { nameEn: 'Neurology' },
     update: {},
     create: {
-      name: 'Neurology',
-      description: 'Brain, spinal cord, and nervous system specialists',
-      icon: 'brain',
+      nameEn: 'Neurology',
+      nameAr: 'المخ والأعصاب',
     },
   });
 
-  // 2. Seed Admin User
+  // 2. Seed Reference Data: Locations
+  const cairoLocation = await prisma.location.upsert({
+    where: {
+      governorate_city: {
+        governorate: 'Cairo',
+        city: 'Nasr City',
+      },
+    },
+    update: {},
+    create: {
+      governorate: 'Cairo',
+      city: 'Nasr City',
+      latitude: 30.0561,
+      longitude: 31.3301,
+    },
+  });
+
+  // 3. Seed Admin User
   await prisma.user.upsert({
     where: { email: 'admin@medlink.com' },
     update: {},
     create: {
       email: 'admin@medlink.com',
+      mobile: '+201000000001',
       passwordHash,
-      firstName: 'System',
-      lastName: 'Administrator',
       role: Role.ADMIN,
-      phoneNumber: '+1-555-0100',
+      status: UserStatus.ACTIVE,
     },
   });
 
-  // 3. Seed Doctor User
-  const doctorUser = await prisma.user.upsert({
+  // 4. Seed Doctor User & Doctor Profile
+  let doctorUser = await prisma.user.findUnique({
     where: { email: 'dr.smith@medlink.com' },
-    update: {},
-    create: {
-      email: 'dr.smith@medlink.com',
-      passwordHash,
-      firstName: 'Sarah',
-      lastName: 'Smith',
-      role: Role.DOCTOR,
-      phoneNumber: '+1-555-0101',
-      doctorProfile: {
-        create: {
-          specialtyId: cardiology.id,
-          licenseNumber: 'MD-CARD-99281',
-          yearsOfExperience: 12,
-          bio: 'Board-certified cardiologist specializing in adult cardiovascular care and preventive cardiology.',
-          consultationFee: 150.0,
-          clinicAddress: '100 Medical Center Way, Suite 400',
-          isVerified: true,
-          ratingAverage: 4.9,
-          totalReviews: 84,
-        },
-      },
-    },
+    include: { doctor: true },
   });
 
-  // 4. Seed Patient User
-  await prisma.user.upsert({
+  if (!doctorUser) {
+    doctorUser = await prisma.user.create({
+      data: {
+        email: 'dr.smith@medlink.com',
+        mobile: '+201000000002',
+        passwordHash,
+        role: Role.DOCTOR,
+        status: UserStatus.ACTIVE,
+        doctor: {
+          create: {
+            specialtyId: cardiology.id,
+            locationId: cairoLocation.id,
+            fullName: 'Dr. Sarah Smith',
+            gender: Gender.FEMALE,
+            yearsExperience: 12,
+            bio: 'Board-certified cardiologist specializing in adult cardiovascular care and preventive cardiology.',
+            clinicName: 'Smith Cardiology Clinic',
+            clinicAddress: '100 Medical Center Way, Suite 400',
+            licenseNumber: 'MD-CARD-99281',
+            approvalStatus: ApprovalStatus.APPROVED,
+            currentPrice: 150.0,
+          },
+        },
+      },
+      include: { doctor: true },
+    });
+  }
+
+  // 5. Seed Patient User & Patient Profile
+  let patientUser = await prisma.user.findUnique({
     where: { email: 'patient.john@medlink.com' },
-    update: {},
-    create: {
-      email: 'patient.john@medlink.com',
-      passwordHash,
-      firstName: 'John',
-      lastName: 'Doe',
-      role: Role.PATIENT,
-      phoneNumber: '+1-555-0102',
-      patientProfile: {
-        create: {
-          gender: Gender.MALE,
-          bloodType: 'O+',
-          allergies: 'Penicillin',
-          emergencyContact: 'Jane Doe (+1-555-0199)',
-        },
-      },
-    },
+    include: { patient: true },
   });
 
-  console.log('Seed completed successfully.');
+  if (!patientUser) {
+    patientUser = await prisma.user.create({
+      data: {
+        email: 'patient.john@medlink.com',
+        mobile: '+201000000003',
+        passwordHash,
+        role: Role.PATIENT,
+        status: UserStatus.ACTIVE,
+        patient: {
+          create: {
+            fullName: 'John Doe',
+            gender: Gender.MALE,
+            dateOfBirth: new Date('1990-05-15'),
+            healthItems: {
+              create: [
+                {
+                  itemType: HealthItemType.ALLERGY,
+                  name: 'Penicillin',
+                  notes: 'Causes mild rash and swelling',
+                },
+              ],
+            },
+          },
+        },
+      },
+      include: { patient: true },
+    });
+  }
+
+  console.log('Seed completed successfully for new schema.');
 }
 
 main()

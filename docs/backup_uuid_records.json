@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-10-19T19:30:45.102Z",
+  "counts": {
+    "users": 3,
+    "specialties": 3,
+    "doctorProfiles": 1,
+    "patientProfiles": 1
+  },
+  "users": [
+    {
+      "id": "0385480f-56b0-42dd-b900-8df76c9d8264",
+      "email": "admin@medlink.com",
+      "passwordHash": "$2b$10$ORdM8ie2b/8QawjpLTirmuKW7UywndMT6cHA3gCopVvyZHVDfRXLy",
+      "firstName": "System",
+      "lastName": "Administrator",
+      "phoneNumber": "+1-555-0100",
+      "role": "ADMIN",
+      "avatarUrl": null,
+      "isActive": 1,
+      "createdAt": "2026-10-19T15:28:06.424Z",
+      "updatedAt": "2026-10-19T15:28:06.424Z"
+    },
+    {
+      "id": "04c0e44f-03ae-486e-9b55-627677958488",
+      "email": "patient.john@medlink.com",
+      "passwordHash": "$2b$10$ORdM8ie2b/8QawjpLTirmuKW7UywndMT6cHA3gCopVvyZHVDfRXLy",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "+1-555-0102",
+      "role": "PATIENT",
+      "avatarUrl": null,
+      "isActive": 1,
+      "createdAt": "2026-10-19T15:28:06.459Z",
+      "updatedAt": "2026-10-19T15:28:06.459Z"
+    },
+    {
+      "id": "804753f9-2a63-40f8-8cc6-87770d262f78",
+      "email": "dr.smith@medlink.com",
+      "passwordHash": "$2b$10$ORdM8ie2b/8QawjpLTirmuKW7UywndMT6cHA3gCopVvyZHVDfRXLy",
+      "firstName": "Sarah",
+      "lastName": "Smith",
+      "phoneNumber": "+1-555-0101",
+      "role": "DOCTOR",
+      "avatarUrl": null,
+      "isActive": 1,
+      "createdAt": "2026-10-19T15:28:06.441Z",
+      "updatedAt": "2026-10-19T15:28:06.441Z"
+    }
+  ],
+  "specialties": [
+    {
+      "id": "30e37d45-cf0d-4b2e-97b4-13b23f4b5120",
+      "name": "Dermatology",
+      "description": "Skin, hair, and nail health specialists",
+      "icon": "activity",
+      "createdAt": "2026-10-19T15:28:06.410Z"
+    },
+    {
+      "id": "46848ff5-6159-4ac8-8009-b23e23e03fd0",
+      "name": "Cardiology",
+      "description": "Heart and cardiovascular system specialists",
+      "icon": "heart-pulse",
+      "createdAt": "2026-10-19T15:28:06.391Z"
+    },
+    {
+      "id": "c372dfbf-da19-4e0b-bd62-d1da10fd7e49",
+      "name": "Neurology",
+      "description": "Brain, spinal cord, and nervous system specialists",
+      "icon": "brain",
+      "createdAt": "2026-10-19T15:28:06.418Z"
+    }
+  ],
+  "doctorProfiles": [
+    {
+      "id": "759be0d4-9227-4c71-b336-801b935fee2d",
+      "userId": "804753f9-2a63-40f8-8cc6-87770d262f78",
+      "specialtyId": "46848ff5-6159-4ac8-8009-b23e23e03fd0",
+      "licenseNumber": "MD-CARD-99281",
+      "yearsOfExperience": 12,
+      "bio": "Board-certified cardiologist specializing in adult cardiovascular care and preventive cardiology.",
+      "consultationFee": "150",
+      "clinicAddress": "100 Medical Center Way, Suite 400",
+      "isVerified": 1,
+      "ratingAverage": 4.9,
+      "totalReviews": 84,
+      "createdAt": "2026-10-19T15:28:06.441Z",
+      "updatedAt": "2026-10-19T15:28:06.441Z"
+    }
+  ],
+  "patientProfiles": [
+    {
+      "id": "1f239474-bb27-4e83-8dad-7bfb44863277",
+      "userId": "04c0e44f-03ae-486e-9b55-627677958488",
+      "dateOfBirth": null,
+      "gender": "MALE",
+      "bloodType": "O+",
+      "allergies": "Penicillin",
+      "emergencyContact": "Jane Doe (+1-555-0199)"
+    }
+  ]
+}
